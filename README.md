@@ -21,6 +21,69 @@ You can install this package via Composer:
 composer require cloakwp/block-parser
 ```
 
+## Example Output
+
+<details>
+ <summary>Structured data</summary>
+ 
+```json
+[
+  {
+    "name": "core/paragraph",
+    "type": "core",
+    "attrs": {
+      "content": "Contact us via phone <a href=\"tel:123-456-7890\">(123) 456-7890</a> or email <a href=\"mailto:info@example.com\">info@example.com</a>.",
+      "dropCap": false
+    }
+  },
+  {
+    "name": "acf/hero",
+    "type": "acf",
+    "attrs": {
+      "style": {
+        "spacing": {
+          "margin": {
+            "bottom": "var:preset|spacing|60"
+          }
+        }
+      },
+      "className": "pb-8 md:pb-10",
+      "align": "full",
+      "backgroundColor": "bg-root-dim"
+    },
+    // ACF field data:
+    "data": {
+      "hero_style": "image_right",
+      "image": {
+        "medium": {
+          "src": "http://localhost/app/uploads/sites/8/2024/08/example-300x200.jpeg",
+          "width": 300,
+          "height": 200
+        },
+        "large": {
+          "src": "http://localhost/app/uploads/sites/8/2024/08/example-1024x683.jpeg",
+          "width": 1024,
+          "height": 683
+        },
+        "full": {
+          "src": "http://localhost/app/uploads/sites/8/2024/08/example.jpeg",
+          "width": 1620,
+          "height": 1080
+        },
+        "alt": "example alt description",
+        "caption": "example caption"
+      },
+      "eyebrow": "WordPress Experts",
+      "h1": "Build your dream website.",
+      "subtitle": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+      "cta_buttons": false,
+      "show_social_proof": false
+    }
+  }
+]
+```
+</details>
+
 ## Usage
 
 ### Basic Usage
@@ -35,7 +98,10 @@ $blockData = $blockParser->parseBlocksFromPost($postId);
 
 ### Extending
 
-The BlockParser uses the built-in core function, `parse_blocks()`, to initially parse the blocks, but unfortunately this function doesn't do the full job. We extend the basic built-in parsing with block "transformers" to finish the job.
+<details>
+ <summary>Custom Transformers</summary>
+
+The BlockParser uses the built-in core function, `parse_blocks()`, to initially parse the blocks, but unfortunately this function doesn't do the full job. So, we extend the basic built-in parsing with block "transformers".
 
 By default, the BlockParser uses the following transformers:
 
@@ -95,7 +161,10 @@ $blockParser->registerBlockTransformer(MyCustomBlockTransformer::class)
 $blockData = $blockParser->parseBlocksFromPost($postId);
 ```
 
-#### Filters
+</details>
+
+<details>
+ <summary>Filter Hooks</summary>
 
 Besides creating custom transformers, you can also modify parsed block data using filters. These filters are applied after the block has been transformed by the appropriate transformer, but before the block is returned:
 
@@ -148,3 +217,5 @@ add_filter('cloakwp/block/field/blockName=acf/hero-section', function(mixed $fie
   return $fieldValue;
 }, 10, 2);
 ```
+
+</details>
