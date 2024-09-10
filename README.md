@@ -128,7 +128,7 @@ $blockParser = new BlockParser();
 $blockParser->registerBlockTransformer(MyCustomACFBlockTransformer::class);
 ```
 
-If in the above example you want to add a transformer for some custom block type, you just specify a custom value for the static $type property, and then extend the BlockParser class and override the `determineBlockType()` method to add your logic for determining when a block is of your custom type -- example:
+If in the above example you want to add a transformer for some custom block type, you just specify a custom value for the static `$type` property, and then extend the `BlockParser` class and override the `determineBlockType()` method to add your logic for determining when a block is of your custom type; for example:
 
 ```php
 class MyCustomBlockParser extends BlockParser
