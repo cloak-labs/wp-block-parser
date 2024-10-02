@@ -49,7 +49,7 @@ class BlockParser
     }
 
     $type = $transformerClass::getType();
-    $this->transformers[$type] = new $transformerClass();
+    $this->transformers[$type] = new $transformerClass($this);
   }
 
   public function parseBlocksFromPost(WP_Post|int $post): array
@@ -79,17 +79,31 @@ class BlockParser
 
   protected function transformBlocks(array $blocks, int $postId): array
   {
-    return array_map(
-      fn($block) => $this->transformBlock($block, $postId),
-      array_filter($blocks, fn($block) => !empty ($block['blockName']))
+    return array_reduce(
+      array_filter($blocks, fn($block) => !empty ($block['blockName'])),
+      function ($carry, $block) use ($postId) {
+        $result = $this->transformBlock($block, $postId);
+        if ($this->isArrayOfBlocks($result)) {
+          // handle WP Synced Patterns, which at this point appear as nested arrays of blocks which must be flattened:
+          $carry = array_merge($carry, $result);
+        } else {
+          $carry[] = $result;
+        }
+        return $carry;
+      },
+      []
     );
   }
 
   protected function determineBlockType(WP_Block $block): string
   {
-    if (isset($block->block_type->attributes['data'])) {
+    if (isset($block->block_type->attributes['data']))
       return 'acf';
-    }
     return 'core';
+  }
+
+  private function isArrayOfBlocks(array $block): bool
+  {
+    return is_array($block) && isset($block[0]) && is_array($block[0]);
   }
 }
