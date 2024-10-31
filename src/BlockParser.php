@@ -97,7 +97,7 @@ class BlockParser
 
   protected function determineBlockType(WP_Block $block): string
   {
-    if (isset($block->block_type->attributes['data']))
+    if (isset($block->block_type->attributes['data']) || str_starts_with($block->name, 'acf/'))
       return 'acf';
     return 'core';
   }
