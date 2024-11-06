@@ -49,13 +49,24 @@ class ACFBlockTransformer extends AbstractBlockTransformer
       acf_setup_meta($block->attributes['data'], $blockId);
     }
 
+    $fieldIds = array_unique(
+      array_values(
+        array_map(function ($fieldKey) use ($fields) {
+          $fieldObject = get_field_object($fields[$fieldKey]);
+          return $fieldObject['ID'];
+        }, array_filter(array_keys($fields), function ($fieldKey) use ($fields) {
+          return $this->isFieldKey($fieldKey, $fields[$fieldKey]);
+        }))
+      )
+    );
+
     foreach ($fields as $key => $value) {
       if ($this->isFieldKey($key, $value)) {
         $fieldName = ltrim($key, '_');
         $fieldObject = get_field_object($value) ?: [];
         $fieldValue = $fields[$fieldName];
 
-        if (!$this->isSubField($fieldObject) && !$this->isAccordion($fieldObject)) {
+        if (!$this->isSubField($fieldObject, $fieldIds) && !$this->isAccordion($fieldObject)) {
           $parsedFields[$fieldName] = $this->formatFieldValue($fieldName, $fieldValue, $fieldObject, $blockId);
         }
       } elseif (!isset($fields['_' . $key])) {
@@ -84,9 +95,9 @@ class ACFBlockTransformer extends AbstractBlockTransformer
    * @param array $fieldObject The field object
    * @return bool True if it's a sub-field, false otherwise
    */
-  protected function isSubField(array $fieldObject): bool
+  protected function isSubField(array $fieldObject, array $blockFieldIds): bool
   {
-    return isset($fieldObject['parent']) && str_starts_with($fieldObject['parent'], "field_");
+    return isset($fieldObject['parent']) && (in_array($fieldObject['parent'], $blockFieldIds) || str_starts_with($fieldObject['parent'], "field_"));
   }
 
   /**
