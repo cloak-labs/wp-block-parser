@@ -65,6 +65,9 @@ class BlockParser
   public function transformBlock(array $block, int $postId): array
   {
     $wpBlock = new WP_Block($block);
+    if (!is_admin()) {
+      $wpBlock->render(); // triggers processing of Block Bindings and Interactivity directives etc.
+    }
     $blockType = $this->determineBlockType($wpBlock);
 
     $transformer = $this->transformers[$blockType] ?? $this->transformers['core'];
