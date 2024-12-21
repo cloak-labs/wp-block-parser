@@ -50,7 +50,7 @@ class CoreBlockTransformer extends AbstractBlockTransformer
 
     foreach ($blockTypeAttrs as $key => $attribute) {
       if (!isset($blockAttrs[$key]) || $blockAttrs[$key] == "") {
-        $attrValue = $attributeParser->getAttribute($attribute, $block->inner_html, $postId);
+        $attrValue = $attributeParser->getAttribute($attribute, $block->inner_html ?? $block->inner_content, $postId);
         if ($attrValue !== null) {
           $blockAttrs[$key] = $attrValue;
         }
