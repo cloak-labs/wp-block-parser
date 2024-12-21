@@ -51,6 +51,8 @@ class AttributeParser
         return $dom->query($selector)->attr($attribute['attribute']);
       case 'html':
         return $dom->query($selector)->html();
+      case 'rich-text':
+        return $dom->query($selector)->html();
       case 'text':
         return $dom->query($selector)->text();
       case 'query':
