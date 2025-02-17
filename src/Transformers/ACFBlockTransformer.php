@@ -66,8 +66,11 @@ class ACFBlockTransformer extends AbstractBlockTransformer
         $fieldObject = get_field_object($value) ?: [];
         $fieldValue = $fields[$fieldName];
 
-        if (!$this->isSubField($fieldObject, $fieldIds) && !$this->isAccordion($fieldObject)) {
-          $parsedFields[$fieldName] = $this->formatFieldValue($fieldName, $fieldValue, $fieldObject, $blockId);
+        if (!$this->isSubField($fieldObject, $fieldIds) && !$this->isExcludedFieldType($fieldObject)) {
+          $value = $this->formatFieldValue($fieldName, $fieldValue, $fieldObject, $blockId);
+          if ($value !== null && $value !== '') {
+            $parsedFields[$fieldName] = $value;
+          }
         }
       } elseif (!isset($fields['_' . $key])) {
         $parsedFields[$key] = $value;
@@ -101,14 +104,78 @@ class ACFBlockTransformer extends AbstractBlockTransformer
   }
 
   /**
-   * Check if a field is an accordion field
+   * Check if a field is a type that should be excluded from the parsed result (usually layout-related fields that hold no structured data, such as Accordions and Tabs)
    *
    * @param array $fieldObject The field object
-   * @return bool True if it's an accordion field, false otherwise
+   * @return bool True if it's an excluded field type, false otherwise
    */
-  protected function isAccordion(array $fieldObject): bool
+  protected function isExcludedFieldType(array $fieldObject): bool
   {
-    return ($fieldObject['type'] ?? '') === 'accordion';
+    return in_array($fieldObject['type'] ?? '', ['accordion', 'tab']);
+  }
+
+  /**
+   * This is a similar function to ACF's built-in get_field(), but it allows us
+   * to exclude certain field types using the isExcludedFieldType() method from this class.
+   */
+  protected function getField(string $selector, string $block_id): mixed
+  {
+    // filter block_id
+    $block_id = acf_get_valid_post_id($block_id);
+
+    // get field
+    $field = acf_maybe_get_field($selector, $block_id);
+
+    // recursively filter sub_fields
+    $field = $this->filterExcludedSubFields($field);
+
+    // get value for field
+    $value = acf_get_value($block_id, $field);
+
+    return acf_format_value($value, $block_id, $field);
+  }
+
+  /**
+   * Recursively filter out invalid sub_fields
+   *
+   * @param array $field The field object
+   * @return array The field object with filtered sub_fields
+   */
+  protected function filterExcludedSubFields(array $field): array
+  {
+    if (isset($field['sub_fields']) && is_array($field['sub_fields'])) {
+      $field['sub_fields'] = array_filter($field['sub_fields'], function ($subField) {
+        return !$this->isExcludedFieldType($subField);
+      });
+
+      // Recursively filter sub_fields of sub_fields
+      foreach ($field['sub_fields'] as &$subField) {
+        $subField = $this->filterExcludedSubFields($subField);
+      }
+    }
+
+    return $field;
+  }
+
+  /**
+   * Remove empty properties from an associative array
+   *
+   * @param array $object The object to remove empty properties from
+   * @return array The object with empty properties removed
+   */
+  protected function removeEmptyProperties(array $object): array
+  {
+    foreach ($object as $key => $value) {
+      if (is_array($value)) {
+        $object[$key] = $this->removeEmptyProperties($value);
+      } elseif (is_bool($value) || is_numeric($value) || $value === '0') {
+        continue;
+      } elseif (empty($value) || $value == "") {
+        unset($object[$key]);
+      }
+    }
+
+    return $object;
   }
 
   /**
@@ -125,14 +192,16 @@ class ACFBlockTransformer extends AbstractBlockTransformer
     $fieldType = $fieldObject['type'] ?? '';
 
     if ($this->requiresFormatting($fieldType, $fieldValue)) {
-      $fieldValue = get_field($fieldName, $blockId);
+      $fieldValue = $this->getField($fieldName, $blockId);
     }
 
-    return apply_filters('cloakwp/block/field', $fieldValue, $fieldObject, [
+    $fieldValue = apply_filters('cloakwp/block/field', $fieldValue, $fieldObject, [
       'type' => $fieldType,
       'name' => $fieldName,
       'blockName' => $fieldObject['name'] ?? '',
     ]);
+
+    return is_array($fieldValue) ? $this->removeEmptyProperties($fieldValue) : $fieldValue;
   }
 
   /**
