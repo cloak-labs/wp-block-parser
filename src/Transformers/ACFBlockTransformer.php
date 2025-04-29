@@ -49,21 +49,24 @@ class ACFBlockTransformer extends AbstractBlockTransformer
       acf_setup_meta($block->attributes['data'], $blockId);
     }
 
-    $fieldIds = array_unique(
-      array_values(
-        array_map(function ($fieldKey) use ($fields) {
-          $fieldObject = get_field_object($fields[$fieldKey]);
-          return $fieldObject['ID'];
-        }, array_filter(array_keys($fields), function ($fieldKey) use ($fields) {
-          return $this->isFieldKey($fieldKey, $fields[$fieldKey]);
-        }))
-      )
-    );
+    $fieldIds = [];
+    $fieldObjects = [];
+    foreach ($fields as $key => $value) {
+      if ($this->isFieldKey($key, $value)) {
+        $fieldObject = get_field_object($value);
+        if ($fieldObject && isset($fieldObject['ID'])) {
+          // we use an associative array to deduplicate Id values (important to then run array_keys() below)
+          $fieldIds[$fieldObject['ID']] = true;
+          $fieldObjects[$key] = $fieldObject;
+        }
+      }
+    }
+    $fieldIds = array_keys($fieldIds);
 
     foreach ($fields as $key => $value) {
       if ($this->isFieldKey($key, $value)) {
         $fieldName = ltrim($key, '_');
-        $fieldObject = get_field_object($value) ?: [];
+        $fieldObject = $fieldObjects[$key] ?? [];
         $fieldValue = $fields[$fieldName];
 
         if (!$this->isSubField($fieldObject, $fieldIds) && !$this->isExcludedFieldType($fieldObject)) {
