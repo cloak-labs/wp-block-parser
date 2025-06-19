@@ -127,7 +127,7 @@ class ACFBlockTransformer extends AbstractBlockTransformer
     $block_id = acf_get_valid_post_id($block_id);
 
     // get field
-    $field = acf_maybe_get_field($selector, $block_id);
+    $field = (array) acf_maybe_get_field($selector, $block_id);
 
     // recursively filter sub_fields
     $field = $this->filterExcludedSubFields($field);
