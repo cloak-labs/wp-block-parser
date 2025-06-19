@@ -65,11 +65,19 @@ class BlockParser
   public function transformBlock(array $block, int $postId): array
   {
     $wpBlock = new WP_Block($block);
+
     if (!is_admin()) {
+      global $post;
+      if ($postId != $post->ID) {
+        // somehow (likely while processing the last block) the global $post got set to something else, so we need to reset it manually before calling render(), otherwise Block Bindings will not be resolved correctly
+        $post = get_post($postId);
+        setup_postdata($post);
+      }
+
       $wpBlock->render(); // triggers processing of Block Bindings and Interactivity directives etc.
     }
-    $blockType = $this->determineBlockType($wpBlock);
 
+    $blockType = $this->determineBlockType($wpBlock);
     $transformer = $this->transformers[$blockType] ?? $this->transformers['core'];
     $parsedBlock = $transformer->transform($wpBlock, $postId);
 
@@ -83,7 +91,7 @@ class BlockParser
   protected function transformBlocks(array $blocks, int $postId): array
   {
     return array_reduce(
-      array_filter($blocks, fn($block) => !empty ($block['blockName'])),
+      array_filter($blocks, fn($block) => !empty($block['blockName'])),
       function ($carry, $block) use ($postId) {
         $result = $this->transformBlock($block, $postId);
         if ($this->isArrayOfBlocks($result)) {
