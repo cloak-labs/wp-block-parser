@@ -2,7 +2,7 @@
   "name": "cloakwp/block-parser",
   "description": "Parse Gutenberg + ACF Blocks into structured objects.",
   "type": "library",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "license": "LGPL-3.0-only",
   "autoload": {
     "psr-4": {
