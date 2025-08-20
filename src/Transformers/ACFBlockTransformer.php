@@ -92,7 +92,11 @@ class ACFBlockTransformer extends AbstractBlockTransformer
    */
   protected function isFieldKey(string $key, $value): bool
   {
-    return str_starts_with($key, '_') && str_starts_with($value, 'field_');
+    if (is_string($value) && is_string($key)) {
+      return str_starts_with($key, '_') && str_starts_with($value, 'field_');
+    }
+
+    return false;
   }
 
   /**
