@@ -85,7 +85,7 @@ class BlockParser
       $parsedBlock['innerBlocks'] = $this->transformBlocks($block['innerBlocks'], $postId);
     }
 
-    return apply_filters('cloakwp/block', $parsedBlock, $wpBlock, $postId);
+    return apply_filters('cloakwp/block', $parsedBlock, $wpBlock, $postId); // YOOO
   }
 
   protected function transformBlocks(array $blocks, int $postId): array
