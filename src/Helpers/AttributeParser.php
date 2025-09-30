@@ -18,7 +18,16 @@ class AttributeParser
       $value = $attribute['default'];
     }
 
-    if (isset($attribute['type']) && rest_validate_value_from_schema($value, $attribute)) {
+    // Only run validation/sanitization if the type is a built-in type supported by WP REST schema
+    $builtinTypes = ['array', 'object', 'string', 'number', 'integer', 'boolean', 'null'];
+    if (
+      isset($attribute['type']) &&
+      (
+        (is_string($attribute['type']) && in_array($attribute['type'], $builtinTypes, true)) ||
+        (is_array($attribute['type']) && count(array_diff($attribute['type'], $builtinTypes)) === 0)
+      ) &&
+      rest_validate_value_from_schema($value, $attribute)
+    ) {
       $value = rest_sanitize_value_from_schema($value, $attribute);
     }
 
