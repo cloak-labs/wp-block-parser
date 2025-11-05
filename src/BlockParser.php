@@ -55,6 +55,10 @@ class BlockParser
   public function parseBlocksFromPost(WP_Post|int $post): array
   {
     $post = get_post($post);
+
+    // if the post is not found, return an empty array. This is helpful when, for example, a Synced Pattern is used on a page but got deleted. Without this early return, a critical error would prevent the editor page from loading.
+    if (!$post) return [];
+
     $blocks = parse_blocks($post->post_content);
 
     return array_values(
