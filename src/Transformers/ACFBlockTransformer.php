@@ -220,7 +220,7 @@ class ACFBlockTransformer extends AbstractBlockTransformer
    */
   protected function requiresFormatting(string $fieldType, $fieldValue): bool
   {
-    $typesRequiringFormatting = ['repeater', 'group', 'flexible_content', 'relationship', 'page_link', 'post_object', 'true_false', 'gallery'];
+    $typesRequiringFormatting = ['repeater', 'group', 'flexible_content', 'relationship', 'page_link', 'post_object', 'true_false', 'gallery', 'file'];
     return in_array($fieldType, $typesRequiringFormatting) || ($fieldType === 'image' && is_int($fieldValue));
   }
 }
