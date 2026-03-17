@@ -3,6 +3,7 @@
 namespace CloakWP\BlockParser\Transformers;
 
 use WP_Block;
+use CloakWP\BlockParser\Profiler;
 
 /**
  * Class ACFBlockTransformer
@@ -22,15 +23,23 @@ class ACFBlockTransformer extends AbstractBlockTransformer
    */
   public function transform(WP_Block $block, int|null $postId = null): array
   {
+    $acfStart = Profiler::isEnabled() ? microtime(true) : null;
+
     $attrs = $block->attributes;
     $acfFields = $this->transformFields($attrs['data'] ?? [], $block);
 
     $this->removeUnwantedAttributes($attrs);
 
-    return array_merge(
+    $result = array_merge(
       $this->formatBaseBlock($block, $attrs),
       ['data' => $acfFields]
     );
+
+    if (Profiler::isEnabled() && $acfStart !== null) {
+      Profiler::addAcfTransformMs((microtime(true) - $acfStart) * 1000);
+    }
+
+    return $result;
   }
 
   /**
@@ -42,6 +51,7 @@ class ACFBlockTransformer extends AbstractBlockTransformer
    */
   protected function transformFields(array $fields, WP_Block $block): array
   {
+    $useProfiler = Profiler::isEnabled();
     $parsedFields = [];
     $blockId = acf_get_block_id($block->attributes['data']);
 
@@ -49,53 +59,138 @@ class ACFBlockTransformer extends AbstractBlockTransformer
       acf_setup_meta($block->attributes['data'], $blockId);
     }
 
-    $fieldIds = [];
+    $allBlockFieldKeys = [];
     $fieldObjects = [];
-    foreach ($fields as $key => $value) {
-      if ($this->isFieldKey($key, $value)) {
-        $fieldObject = get_field_object($value);
-        if ($fieldObject && isset($fieldObject['ID'])) {
-          // we use an associative array to deduplicate Id values (important to then run array_keys() below)
-          $fieldIds[$fieldObject['ID']] = true;
-          $fieldObjects[$key] = $fieldObject;
+    $getObjectsStart = $useProfiler ? microtime(true) : null;
+
+    // ===== FIRST LOOP 
+    //$fields contains both field name-key pairs and field name-value pairs -- we only care about the former. This loop is purposely separate from the next $fields loop, to speed up lookups of potential parent field names.
+    $nameKeyPairs = [];
+    $nameValuePairs = [];
+    foreach ($fields as $name => $key) {  
+      if ($this->isFieldNameKeyPair($name, $key)) {
+        $nameKeyPairs[ltrim($name, '_')] = $key;
+      } else {
+        $nameValuePairs[$name] = $key;
+      }
+    } 
+    
+    // ===== SECOND LOOP 
+    // This loop retrieves the field objects for all fields in the block that actually have values.
+    foreach ($nameKeyPairs as $fieldName => $fieldKey) {
+      $fieldValue = $nameValuePairs[$fieldName] ?? null;
+
+      // If the field value is empty and it doesn't appear to be a parent field, we skip resolving it to avoid unnecessary loading of field definitions which can really slow down the process.
+      if ($this->isEmptyFieldValue($fieldValue)) {
+        $potentialSubFieldMatches = array_filter(array_keys($fields), function ($name) use ($fieldName) {
+          return $name !== $fieldName && str_starts_with($name, $fieldName);
+        });
+
+        if (count($potentialSubFieldMatches) <= 0) {
+          $allBlockFieldKeys[$fieldKey] = true;
+          continue;
         }
+      }
+
+      // Definition only: acf_get_field($fieldKey) avoids load_value/format_value. Profiler times this as "definitions".
+      $defStart = $useProfiler ? microtime(true) : null;
+      $fieldObject = function_exists('acf_get_field') ? acf_get_field($fieldKey) : get_field_object($fieldKey, false, false, false);
+      // $fieldObject = get_field_object($value);
+      if ($useProfiler && $defStart !== null) {
+        Profiler::addAcfGetFieldDefinitionsMs((microtime(true) - $defStart) * 1000, $block->name);
+      }
+
+      if ($fieldObject && isset($fieldObject['ID'])) {
+        // we use an associative array to deduplicate field keys (important to then run array_keys() below)
+        $allBlockFieldKeys[$fieldKey] = true;
+        $fieldObjects[$fieldName] = $fieldObject;
       }
     }
-    $fieldIds = array_keys($fieldIds);
 
-    foreach ($fields as $key => $value) {
-      if ($this->isFieldKey($key, $value)) {
-        $fieldName = ltrim($key, '_');
-        $fieldObject = $fieldObjects[$key] ?? [];
-        $fieldValue = $fields[$fieldName];
+    if ($useProfiler && $getObjectsStart !== null) {
+      Profiler::addAcfGetFieldObjectsMs((microtime(true) - $getObjectsStart) * 1000, $block->name);
+    }
 
-        if (!$this->isSubField($fieldObject, $fieldIds) && !$this->isExcludedFieldType($fieldObject)) {
-          $value = $this->formatFieldValue($fieldName, $fieldValue, $fieldObject, $blockId);
-          if ($value !== null && $value !== '') {
-            $parsedFields[$fieldName] = $value;
-          }
-        }
-      } elseif (!isset($fields['_' . $key])) {
-        $parsedFields[$key] = $value;
+    $allBlockFieldKeys = array_keys($allBlockFieldKeys);
+    $formatStart = $useProfiler ? microtime(true) : null;
+
+    // ===== THIRD LOOP 
+    // Iterate over resolved field objects to (maybe) apply formatting to the field values.
+    foreach ($fieldObjects as $fieldName => $fieldObject) {
+      $fieldValue = $nameValuePairs[$fieldName] ?? null;
+
+      if ($this->isExcludedFieldType($fieldObject)) {
+        continue;
       }
+
+      if ($this->isSubField($fieldObject, $allBlockFieldKeys)) {
+        if (!isset($fields['_' . $fieldName])) {
+          $parsedFields[$fieldName] = $fieldValue; //! maybe delete?
+        }
+        continue;
+      }
+
+      if ($useProfiler) {
+        $isFlexibleContent = ($fieldObject['type'] ?? '') === 'flexible_content';
+        $acfInnerStart = ($useProfiler && $isFlexibleContent) ? microtime(true) : null;
+      }
+
+      // Format the field value!
+      $formatted = $this->formatFieldValue($fieldName, $fieldValue, $fieldObject, $blockId);
+
+      if ($useProfiler && $acfInnerStart !== null) {
+        Profiler::addInnerBlocksMs((microtime(true) - $acfInnerStart) * 1000, $block->name);
+      }
+
+      if (!$this->isEmptyFieldValue($formatted)) {
+        $parsedFields[$fieldName] = $formatted;
+      }
+    }
+
+    // Uncommon edge-case: copy any name-value pairs that don't have a corresponding name-key pair (i.e. not ACF fields) to the final parsed fields.
+    foreach ($nameValuePairs as $name => $value) {
+      if (isset($nameKeyPairs[$name])) continue; // this is the value half of an ACF field; we already added the formatted value from the format loop
+      $parsedFields[$name] = $value;
+    }
+
+    if ($useProfiler && $formatStart !== null) {
+      Profiler::addAcfFormatFieldsMs((microtime(true) - $formatStart) * 1000, $block->name);
     }
 
     return $parsedFields;
   }
 
   /**
-   * Check if a given key-value pair represents an ACF field key
+   * Check if a given name-key pair represents an ACF field. eg. '_field_name' => 'field_123456' (i.e. how ACF natively stores fields on blocks)
    *
    * @param string $key The field key
    * @param mixed $value The field value
    * @return bool True if it's a field key, false otherwise
    */
-  protected function isFieldKey(string $key, $value): bool
+  protected function isFieldNameKeyPair(string $name, mixed $key): bool
   {
-    if (is_string($value) && is_string($key)) {
-      return str_starts_with($key, '_') && str_starts_with($value, 'field_');
+    if (is_string($name) && is_string($key)) {
+      return str_starts_with($name, '_') && str_starts_with($key, 'field_');
     }
 
+    return false;
+  }
+
+  /**
+   * True when the stored value is considered empty so we can skip resolving the field definition.
+   * Used to avoid loading heavy definitions (e.g. InnerBlocks/Flexible Content with many layouts) when the block doesn't use the field.
+   *
+   * Side effect of treating '' as empty: those fields are omitted from the parsed output (key absent) rather than included as "".
+   * If a parent field (group/repeater/flexible) has value '' we skip resolving it, so its ID is not in allBlockFieldKeys — only relevant if subfields appear as top-level keys in block data (uncommon).
+   */
+  protected function isEmptyFieldValue($value): bool
+  {
+    if ($value === null || $value === '') {
+      return true;
+    }
+    if (is_array($value) && empty($value)) {
+      return true;
+    }
     return false;
   }
 

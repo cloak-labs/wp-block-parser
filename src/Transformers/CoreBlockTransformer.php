@@ -3,11 +3,21 @@
 namespace CloakWP\BlockParser\Transformers;
 
 use WP_Block;
+use CloakWP\BlockParser\BlockParser;
 use CloakWP\BlockParser\Helpers\AttributeParser;
+use CloakWP\BlockParser\Profiler;
 
 class CoreBlockTransformer extends AbstractBlockTransformer
 {
   protected static string $type = 'core';
+
+  protected AttributeParser $attributeParser;
+
+  public function __construct(BlockParser|null $parser = null)
+  {
+    parent::__construct($parser);
+    $this->attributeParser = new AttributeParser();
+  }
 
   public function transform(WP_Block $block, int|null $postId = null): array
   {
@@ -46,15 +56,18 @@ class CoreBlockTransformer extends AbstractBlockTransformer
       ];
     }
 
-    $attributeParser = new AttributeParser();
+    $parseStart = Profiler::isEnabled() ? microtime(true) : null;
 
-    foreach ($blockTypeAttrs as $key => $attribute) {
-      if (!isset($blockAttrs[$key]) || $blockAttrs[$key] == "") {
-        $attrValue = $attributeParser->getAttribute($attribute, $block->inner_html ?? $block->inner_content, $postId);
-        if ($attrValue !== null) {
-          $blockAttrs[$key] = $attrValue;
-        }
-      }
+    // Parse all attributes in one pass (single DOM parse per block instead of per-attribute)
+    $blockAttrs = $this->attributeParser->getAttributes(
+      $blockTypeAttrs,
+      $blockAttrs,
+      $block->inner_html ?? $block->inner_content ?? '',
+      $postId
+    );
+
+    if (Profiler::isEnabled() && $parseStart !== null) {
+      Profiler::addParseAttrsMs((microtime(true) - $parseStart) * 1000);
     }
 
     $this->removeUnwantedAttributes($blockAttrs);

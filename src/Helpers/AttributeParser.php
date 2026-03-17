@@ -6,12 +6,49 @@ use pQuery;
 
 class AttributeParser
 {
+  /**
+   * Parse attributes for multiple block-type attributes in one pass.
+   * Parses the block HTML once and reuses the DOM for all attributes (major perf win).
+   *
+   * @param array<string, array> $blockTypeAttrs Block type attribute definitions
+   * @param array<string, mixed> $blockAttrs Existing block attributes (missing/empty will be filled from HTML)
+   * @param string|array $html Block inner HTML (string) or inner_content array
+   * @param int $postId Post ID for meta sources
+   * @return array<string, mixed> Merged attributes with parsed values
+   */
+  public function getAttributes(array $blockTypeAttrs, array $blockAttrs, string|array $html, int $postId = 0): array
+  {
+    $htmlString = is_array($html) ? implode('', array_filter($html, fn($v) => $v !== null)) : $html;
+    $htmlString = trim($htmlString);
+    $dom = $htmlString !== '' ? pQuery::parseStr($htmlString) : null;
+
+    foreach ($blockTypeAttrs as $key => $attribute) {
+      if (isset($blockAttrs[$key]) && $blockAttrs[$key] !== '') {
+        continue;
+      }
+      $attrValue = $this->getAttributeWithDom($attribute, $dom, $htmlString, $postId);
+      if ($attrValue !== null) {
+        $blockAttrs[$key] = $attrValue;
+      }
+    }
+
+    return $blockAttrs;
+  }
+
   public function getAttribute(array $attribute, string $html, int $postId = 0)
+  {
+    return $this->getAttributeWithDom($attribute, null, $html, $postId);
+  }
+
+  /**
+   * @param \pQuery\Dom|null $dom Pre-parsed DOM (avoids re-parsing when parsing many attributes from same HTML)
+   */
+  protected function getAttributeWithDom(array $attribute, $dom, string $html, int $postId): mixed
   {
     $value = null;
 
     if (isset($attribute['source'])) {
-      $value = $this->getAttributeBySource($attribute, $html, $postId);
+      $value = $this->getAttributeBySource($attribute, $html, $postId, $dom);
     }
 
     if (is_null($value) && isset($attribute['default'])) {
@@ -39,10 +76,18 @@ class AttributeParser
     return $value;
   }
 
-  protected function getAttributeBySource(array $attribute, string $html, int $postId): mixed
+  /**
+   * @param \pQuery\Dom|null $dom Pre-parsed DOM; when null, $html is parsed
+   */
+  protected function getAttributeBySource(array $attribute, string $html, int $postId, $dom = null): mixed
   {
     $source = $attribute['source'];
-    $dom = pQuery::parseStr(trim($html));
+    if ($dom === null) {
+      $dom = trim($html) !== '' ? pQuery::parseStr(trim($html)) : null;
+    }
+    if ($dom === null) {
+      return $this->getAttributeWithoutSelector($attribute, null, $source, $postId);
+    }
 
     if (isset($attribute['selector'])) {
       return $this->getAttributeWithSelector($attribute, $dom, $source);
@@ -71,8 +116,17 @@ class AttributeParser
     return null;
   }
 
+  /**
+   * @param \pQuery\Dom|null $dom
+   */
   protected function getAttributeWithoutSelector(array $attribute, $dom, string $source, int $postId): mixed
   {
+    if ($source === 'meta') {
+      return $this->handleMetaSource($attribute, $postId);
+    }
+    if ($dom === null) {
+      return null;
+    }
     $node = $dom->query();
 
     switch ($source) {
@@ -82,8 +136,6 @@ class AttributeParser
         return $node->html();
       case 'text':
         return $node->text();
-      case 'meta':
-        return $this->handleMetaSource($attribute, $postId);
     }
 
     return null;

@@ -8,6 +8,7 @@ use CloakWP\BlockParser\Transformers\ACFBlockTransformer;
 use CloakWP\HookModifiers;
 use WP_Block;
 use WP_Post;
+use CloakWP\BlockParser\Profiler;
 
 class BlockParser
 {
@@ -54,25 +55,48 @@ class BlockParser
 
   public function parseBlocksFromPost(WP_Post|int $post): array
   {
+    if (Profiler::isEnabled()) {
+      Profiler::start();
+    }
+
     $post = get_post($post);
 
     // if the post is not found, return an empty array. This is helpful when, for example, a Synced Pattern is used on a page but got deleted. Without this early return, a critical error would prevent the editor page from loading.
-    if (!$post) return [];
+    if (!$post) {
+      if (Profiler::isEnabled()) Profiler::end();
+      return [];
+    }
 
     $blocks = parse_blocks($post->post_content);
 
-    return array_values(
+    $result = array_values(
       $this->transformBlocks($blocks, $post->ID)
     );
+
+    if (Profiler::isEnabled()) {
+      Profiler::end();
+    }
+
+    return $result;
   }
 
   public function transformBlock(array $block, int $postId): array
   {
     $wpBlock = new WP_Block($block);
+    $blockName = $block['blockName'] ?? '';
+
+    if (Profiler::isEnabled()) {
+      Profiler::setCurrentBlock($blockName);
+    }
+
+    $renderStart = null;
+    if (Profiler::isEnabled()) {
+      $renderStart = microtime(true);
+    }
 
     if (!is_admin()) {
       global $post;
-      if ($postId != $post->ID) {
+      if (!empty($post) && $postId != $post->ID) {
         // somehow (likely while processing the last block) the global $post got set to something else, so we need to reset it manually before calling render(), otherwise Block Bindings will not be resolved correctly
         $post = get_post($postId);
         setup_postdata($post);
@@ -81,15 +105,35 @@ class BlockParser
       $wpBlock->render(); // triggers processing of Block Bindings and Interactivity directives etc.
     }
 
+    if (Profiler::isEnabled() && $renderStart !== null) {
+      Profiler::addRenderMs((microtime(true) - $renderStart) * 1000);
+    }
+
+    $transformStart = null;
+    if (Profiler::isEnabled()) {
+      $transformStart = microtime(true);
+    }
+
     $blockType = $this->determineBlockType($wpBlock);
     $transformer = $this->transformers[$blockType] ?? $this->transformers['core'];
     $parsedBlock = $transformer->transform($wpBlock, $postId);
 
+    $innerMs = 0.0;
     if (!empty($block['innerBlocks'])) {
+      $innerStart = Profiler::isEnabled() ? microtime(true) : null;
       $parsedBlock['innerBlocks'] = $this->transformBlocks($block['innerBlocks'], $postId);
+      if (Profiler::isEnabled() && $innerStart !== null) {
+        $innerMs = (microtime(true) - $innerStart) * 1000;
+        Profiler::addInnerBlocksMs($innerMs, $blockName);
+      }
     }
 
-    return apply_filters('cloakwp/block', $parsedBlock, $wpBlock, $postId); // YOOO
+    if (Profiler::isEnabled() && $transformStart !== null) {
+      Profiler::addTransformOtherMs((microtime(true) - $transformStart) * 1000, $blockName);
+      Profiler::clearCurrentBlock();
+    }
+
+    return apply_filters('cloakwp/block', $parsedBlock, $wpBlock, $postId);
   }
 
   protected function transformBlocks(array $blocks, int $postId): array
