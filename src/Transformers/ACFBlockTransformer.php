@@ -3,6 +3,7 @@
 namespace CloakWP\BlockParser\Transformers;
 
 use WP_Block;
+use CloakWP\BlockParser\Acf\GutenbergGroupNesting;
 use CloakWP\BlockParser\Profiler;
 
 /**
@@ -80,16 +81,13 @@ class ACFBlockTransformer extends AbstractBlockTransformer
     foreach ($nameKeyPairs as $fieldName => $fieldKey) {
       $fieldValue = $nameValuePairs[$fieldName] ?? null;
 
-      // If the field value is empty and it doesn't appear to be a parent field, we skip resolving it to avoid unnecessary loading of field definitions which can really slow down the process.
-      if ($this->isEmptyFieldValue($fieldValue)) {
-        $potentialSubFieldMatches = array_filter(array_keys($fields), function ($name) use ($fieldName) {
-          return $name !== $fieldName && str_starts_with($name, $fieldName);
-        });
-
-        if (count($potentialSubFieldMatches) <= 0) {
-          $allBlockFieldKeys[$fieldKey] = true;
-          continue;
-        }
+      // Gutenberg stores group subfields as `{parent}_{child}` with an empty parent
+      // value (""). Skip only true leaf empties — not group parents with children.
+      if ($this->isEmptyFieldValue($fieldValue)
+        && !GutenbergGroupNesting::hasFlattenedChildren($fieldName, array_keys($nameValuePairs))
+      ) {
+        $allBlockFieldKeys[$fieldKey] = true;
+        continue;
       }
 
       // Definition only: acf_get_field($fieldKey) avoids load_value/format_value. Profiler times this as "definitions".
@@ -142,12 +140,22 @@ class ACFBlockTransformer extends AbstractBlockTransformer
         Profiler::addInnerBlocksMs((microtime(true) - $acfInnerStart) * 1000, $block->name);
       }
 
+      if (($fieldObject['type'] ?? '') === 'group') {
+        $formatted = GutenbergGroupNesting::merge(
+          is_array($formatted) ? $formatted : [],
+          $fieldName,
+          $fieldObject,
+          $nameValuePairs
+        );
+      }
+
       if (!$this->isEmptyFieldValue($formatted)) {
         $parsedFields[$fieldName] = $formatted;
       }
     }
 
-    // Uncommon edge-case: copy any name-value pairs that don't have a corresponding name-key pair (i.e. not ACF fields) to the final parsed fields.
+    // Copy leftover name-value pairs that have no ACF field key (not registered, or stripped).
+    // Gutenberg-flattened group subfields that still have `_name` keys are handled by GutenbergGroupNesting instead.
     foreach ($nameValuePairs as $name => $value) {
       if (isset($nameKeyPairs[$name])) continue; // this is the value half of an ACF field; we already added the formatted value from the format loop
       $parsedFields[$name] = $value;
@@ -181,7 +189,7 @@ class ACFBlockTransformer extends AbstractBlockTransformer
    * Used to avoid loading heavy definitions (e.g. InnerBlocks/Flexible Content with many layouts) when the block doesn't use the field.
    *
    * Side effect of treating '' as empty: those fields are omitted from the parsed output (key absent) rather than included as "".
-   * If a parent field (group/repeater/flexible) has value '' we skip resolving it, so its ID is not in allBlockFieldKeys — only relevant if subfields appear as top-level keys in block data (uncommon).
+   * Group parents with Gutenberg-flattened children are still resolved (see GutenbergGroupNesting).
    */
   protected function isEmptyFieldValue($value): bool
   {
