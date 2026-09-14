@@ -3,6 +3,7 @@
 namespace CloakWP\BlockParser\Transformers;
 
 use WP_Block;
+use CloakWP\BlockParser\Acf\BlockDataFilters;
 use CloakWP\BlockParser\Acf\GutenbergGroupNesting;
 use CloakWP\BlockParser\Profiler;
 
@@ -36,11 +37,42 @@ class ACFBlockTransformer extends AbstractBlockTransformer
       ['data' => $acfFields]
     );
 
+    $result = BlockDataFilters::apply(
+      $result,
+      $this->getBlockFieldDefinitions($block),
+      $block,
+      $postId
+    );
+
     if (Profiler::isEnabled() && $acfStart !== null) {
       Profiler::addAcfTransformMs((microtime(true) - $acfStart) * 1000);
     }
 
     return $result;
+  }
+
+  /**
+   * All ACF field definitions registered on this block, including empty fields
+   * that Gutenberg omitted from the saved attributes (so consumers can still
+   * discover marked groups such as Query).
+   *
+   * @return list<array<string, mixed>>
+   */
+  protected function getBlockFieldDefinitions(WP_Block $block): array
+  {
+    $payload = is_array($block->parsed_block ?? null) ? $block->parsed_block : [];
+    if (!isset($payload['name'])) {
+      $payload['name'] = $payload['blockName'] ?? $block->name;
+    }
+
+    if (function_exists('acf_get_block_fields')) {
+      $fields = acf_get_block_fields($payload);
+      if (is_array($fields) && $fields !== []) {
+        return array_values($fields);
+      }
+    }
+
+    return [];
   }
 
   /**

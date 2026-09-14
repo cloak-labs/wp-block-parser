@@ -189,6 +189,18 @@ add_filter('cloakwp/block/type=acf', function(array $parsedBlock, WP_Block $wpBl
 }, 10, 2);
 ```
 
+After every ACF field on a block has been formatted — and **before** `cloakwp/block` — you can transform the complete parsed block together with its field definitions:
+
+```php
+add_filter('cloakwp/block/data', function (array $parsedBlock, array $fieldDefinitions, WP_Block $wpBlock, ?int $postId) {
+  // $fieldDefinitions is the ACF field-object tree for the block (nested `sub_fields` included),
+  // even for fields Gutenberg omitted because they were empty.
+  return $parsedBlock;
+}, 10, 4);
+```
+
+Use this hook to inject derived data (for example resolving a Query group into `data.items`) without replacing a block-level `cloakwp/block` callback. `cloakwp/block` runs after this filter.
+
 You can also filter ACF field values within ACF blocks using the `cloakwp/block/field` filter:
 
 ```php

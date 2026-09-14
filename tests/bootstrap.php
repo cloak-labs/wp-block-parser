@@ -18,3 +18,28 @@ if (is_readable($autoload)) {
     }
   });
 }
+
+$GLOBALS['wp_filters'] = [];
+
+if (!function_exists('add_filter')) {
+  function add_filter($hook, $callback, $priority = 10, $accepted_args = 1): void
+  {
+    $GLOBALS['wp_filters'][$hook][$priority][] = $callback;
+  }
+}
+
+if (!function_exists('apply_filters')) {
+  function apply_filters($hook, $value, ...$args)
+  {
+    $priorities = $GLOBALS['wp_filters'][$hook] ?? [];
+    ksort($priorities);
+
+    foreach ($priorities as $callbacks) {
+      foreach ($callbacks as $callback) {
+        $value = $callback($value, ...$args);
+      }
+    }
+
+    return $value;
+  }
+}
