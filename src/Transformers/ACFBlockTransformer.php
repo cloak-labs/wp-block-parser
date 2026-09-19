@@ -343,6 +343,10 @@ class ACFBlockTransformer extends AbstractBlockTransformer
       'blockName' => $fieldObject['name'] ?? '',
     ]);
 
+    if ($fieldType === 'true_false') {
+      return GutenbergGroupNesting::coerceTrueFalse($fieldValue);
+    }
+
     return is_array($fieldValue) ? $this->removeEmptyProperties($fieldValue) : $fieldValue;
   }
 

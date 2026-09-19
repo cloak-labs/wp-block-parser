@@ -52,6 +52,17 @@ final class GutenbergGroupNesting
         continue;
       }
 
+      // true_false: ACF format_value turns "0" into false. isBlank(false) is
+      // for empty taxonomies — treating it as missing here re-injects Gutenberg's
+      // raw "0", which is truthy in JS.
+      if (($sub['type'] ?? '') === 'true_false') {
+        $source = self::isUnsetTrueFalse($current) ? $raw : $current;
+        if (!self::isUnsetTrueFalse($source)) {
+          $out[$name] = self::coerceTrueFalse($source);
+        }
+        continue;
+      }
+
       if (!self::isBlank($current)) {
         $out[$name] = $current;
         continue;
@@ -85,6 +96,7 @@ final class GutenbergGroupNesting
 
   /**
    * Empty taxonomy/group values ACF stores as false or "".
+   * Do not use this for true_false — false there means "off".
    */
   public static function isBlank(mixed $value): bool
   {
@@ -93,5 +105,19 @@ final class GutenbergGroupNesting
     }
 
     return is_array($value) && $value === [];
+  }
+
+  /**
+   * Gutenberg stores off as "", 0, "0", or false. Only explicit on-values
+   * become true — matching kit's `acfTrue`.
+   */
+  public static function coerceTrueFalse(mixed $value): bool
+  {
+    return $value === true || $value === 1 || $value === '1';
+  }
+
+  private static function isUnsetTrueFalse(mixed $value): bool
+  {
+    return $value === null || $value === '';
   }
 }

@@ -112,4 +112,55 @@ final class GutenbergGroupNestingTest extends TestCase
     $this->assertFalse(GutenbergGroupNesting::isBlank(['29']));
     $this->assertFalse(GutenbergGroupNesting::isBlank(0));
   }
+
+  public function testTrueFalseKeepsFormattedFalseInsteadOfRawZeroString(): void
+  {
+    $carousel = [
+      'name' => 'carousel_options',
+      'type' => 'group',
+      'sub_fields' => [
+        ['name' => 'overflow_visible', 'type' => 'true_false'],
+        ['name' => 'loop', 'type' => 'true_false'],
+      ],
+    ];
+
+    $nested = GutenbergGroupNesting::merge(
+      ['overflow_visible' => false, 'loop' => true],
+      'carousel_options',
+      $carousel,
+      [
+        'carousel_options' => '',
+        'carousel_options_overflow_visible' => '0',
+        'carousel_options_loop' => '1',
+      ],
+    );
+
+    $this->assertFalse($nested['overflow_visible']);
+    $this->assertTrue($nested['loop']);
+  }
+
+  public function testTrueFalseCoercesRawGutenbergStringsWhenGroupFormatIsEmpty(): void
+  {
+    $carousel = [
+      'name' => 'carousel_options',
+      'type' => 'group',
+      'sub_fields' => [
+        ['name' => 'overflow_visible', 'type' => 'true_false'],
+        ['name' => 'autoplay', 'type' => 'true_false'],
+      ],
+    ];
+
+    $nested = GutenbergGroupNesting::merge(
+      [],
+      'carousel_options',
+      $carousel,
+      [
+        'carousel_options_overflow_visible' => '0',
+        'carousel_options_autoplay' => '1',
+      ],
+    );
+
+    $this->assertFalse($nested['overflow_visible']);
+    $this->assertTrue($nested['autoplay']);
+  }
 }
