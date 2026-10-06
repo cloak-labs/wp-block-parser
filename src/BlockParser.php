@@ -6,6 +6,9 @@ use CloakWP\BlockParser\Transformers\BlockTransformerInterface;
 use CloakWP\BlockParser\Transformers\CoreBlockTransformer;
 use CloakWP\BlockParser\Transformers\ACFBlockTransformer;
 use CloakWP\HookModifiers;
+use CloakWP\BlockParser\Html\HtmlAdapterInterface;
+use CloakWP\BlockParser\Html\NativeHtmlAdapter;
+use CloakWP\BlockParser\Acf\LocalFieldIndex;
 use WP_Block;
 use WP_Post;
 use CloakWP\BlockParser\Profiler;
@@ -14,9 +17,11 @@ class BlockParser
 {
   protected array $transformers = [];
   private static $initialized = false;
+  protected HtmlAdapterInterface $htmlAdapter;
 
-  public function __construct()
+  public function __construct(?HtmlAdapterInterface $htmlAdapter = null)
   {
+    $this->htmlAdapter = $htmlAdapter ?? apply_filters('cloakwp/block_parser/html_adapter', new NativeHtmlAdapter());
     if (!self::$initialized) {
       // Run the following code only ONCE, no matter how many instances of BlockParser are created
       HookModifiers::make(['name', 'type'])
@@ -32,6 +37,11 @@ class BlockParser
     }
 
     $this->registerDefaultTransformers();
+  }
+
+  public function getHtmlAdapter(): HtmlAdapterInterface
+  {
+    return $this->htmlAdapter;
   }
 
   protected function registerDefaultTransformers(): void
@@ -82,6 +92,11 @@ class BlockParser
 
   public function transformBlock(array $block, int $postId): array
   {
+    return LocalFieldIndex::run(fn() => $this->transformBlockWithFieldIndex($block, $postId));
+  }
+
+  private function transformBlockWithFieldIndex(array $block, int $postId): array
+  {
     $wpBlock = new WP_Block($block);
     $blockName = $block['blockName'] ?? '';
 
@@ -102,7 +117,9 @@ class BlockParser
         setup_postdata($post);
       }
 
-      $wpBlock->render(); // triggers processing of Block Bindings and Interactivity directives etc.
+      if ($this->shouldRenderForAttributes($wpBlock, $postId)) {
+        $wpBlock->render(); // Resolve bindings before extracting structured attributes.
+      }
     }
 
     if (Profiler::isEnabled() && $renderStart !== null) {
@@ -136,12 +153,31 @@ class BlockParser
     return apply_filters('cloakwp/block', $parsedBlock, $wpBlock, $postId);
   }
 
+  /**
+   * Rendering a container also renders its descendants. Structured output only
+   * needs that work when bindings compute attributes; requested HTML is handled
+   * by the transformer. Integrations that mutate attributes during rendering
+   * can opt individual blocks into this preliminary render.
+   */
+  protected function shouldRenderForAttributes(WP_Block $block, int $postId): bool
+  {
+    return (bool) apply_filters(
+      'cloakwp/block/render_for_attributes',
+      !empty($block->parsed_block['attrs']['metadata']['bindings']),
+      $block,
+      $postId
+    );
+  }
+
   protected function transformBlocks(array $blocks, int $postId): array
   {
     return array_reduce(
       array_filter($blocks, fn($block) => !empty($block['blockName'])),
       function ($carry, $block) use ($postId) {
         $result = $this->transformBlock($block, $postId);
+        if ($result === []) {
+          return $carry;
+        }
         if ($this->isArrayOfBlocks($result)) {
           // handle WP Synced Patterns, which at this point appear as nested arrays of blocks which must be flattened:
           $carry = array_merge($carry, $result);

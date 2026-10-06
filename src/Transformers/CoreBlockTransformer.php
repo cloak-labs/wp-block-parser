@@ -16,7 +16,7 @@ class CoreBlockTransformer extends AbstractBlockTransformer
   public function __construct(BlockParser|null $parser = null)
   {
     parent::__construct($parser);
-    $this->attributeParser = new AttributeParser();
+    $this->attributeParser = new AttributeParser($parser?->getHtmlAdapter());
   }
 
   public function transform(WP_Block $block, int|null $postId = null): array
@@ -43,8 +43,8 @@ class CoreBlockTransformer extends AbstractBlockTransformer
   protected function parseAttributes(WP_Block $block, int $postId): array
   {
     $blockAttrs = $block->attributes;
-    $blockTypeAttrs = $block->block_type->attributes;
-    $supports = $block->block_type->supports;
+    $blockTypeAttrs = $block->block_type->attributes ?? [];
+    $supports = $block->block_type->supports ?? [];
 
     // Manually add anchor attribute if supported:
     if ($supports && isset($supports['anchor']) && $supports['anchor']) {

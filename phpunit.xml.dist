@@ -3,10 +3,20 @@
          xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.0/phpunit.xsd"
          bootstrap="tests/bootstrap.php"
          colors="true"
-         cacheDirectory=".phpunit.cache">
+         cacheDirectory=".phpunit.cache"
+         failOnEmptyTestSuite="true"
+         failOnWarning="true"
+         failOnRisky="true"
+         failOnDeprecation="true"
+         beStrictAboutOutputDuringTests="true">
     <testsuites>
         <testsuite name="BlockParser">
             <directory>tests</directory>
         </testsuite>
     </testsuites>
+    <source ignoreDirectDeprecations="true" ignoreIndirectDeprecations="true">
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
 </phpunit>

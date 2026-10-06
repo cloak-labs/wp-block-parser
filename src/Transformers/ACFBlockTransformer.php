@@ -5,6 +5,7 @@ namespace CloakWP\BlockParser\Transformers;
 use WP_Block;
 use CloakWP\BlockParser\Acf\BlockDataFilters;
 use CloakWP\BlockParser\Acf\GutenbergGroupNesting;
+use CloakWP\BlockParser\Acf\LocalFieldIndex;
 use CloakWP\BlockParser\Profiler;
 
 /**
@@ -24,6 +25,11 @@ class ACFBlockTransformer extends AbstractBlockTransformer
    * @return array The transformed block data
    */
   public function transform(WP_Block $block, int|null $postId = null): array
+  {
+    return LocalFieldIndex::run(fn() => $this->transformWithFieldIndex($block, $postId));
+  }
+
+  private function transformWithFieldIndex(WP_Block $block, int|null $postId): array
   {
     $acfStart = Profiler::isEnabled() ? microtime(true) : null;
 
@@ -86,11 +92,8 @@ class ACFBlockTransformer extends AbstractBlockTransformer
   {
     $useProfiler = Profiler::isEnabled();
     $parsedFields = [];
-    $blockId = acf_get_block_id($block->attributes['data']);
-
-    if (is_array($block->attributes['data'])) {
-      acf_setup_meta($block->attributes['data'], $blockId);
-    }
+    $blockId = acf_get_block_id($fields);
+    acf_setup_meta($fields, $blockId);
 
     $allBlockFieldKeys = [];
     $fieldObjects = [];
@@ -166,6 +169,7 @@ class ACFBlockTransformer extends AbstractBlockTransformer
       }
 
       // Format the field value!
+      $fieldObject['blockName'] = $block->name;
       $formatted = $this->formatFieldValue($fieldName, $fieldValue, $fieldObject, $blockId);
 
       if ($useProfiler && $acfInnerStart !== null) {
@@ -340,7 +344,7 @@ class ACFBlockTransformer extends AbstractBlockTransformer
     $fieldValue = apply_filters('cloakwp/block/field', $fieldValue, $fieldObject, [
       'type' => $fieldType,
       'name' => $fieldName,
-      'blockName' => $fieldObject['name'] ?? '',
+      'blockName' => $fieldObject['blockName'] ?? '',
     ]);
 
     if ($fieldType === 'true_false') {

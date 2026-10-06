@@ -1,0 +1,7 @@
+{
+  "cases": [
+    { "id": "block-parser:simple", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=simple", "auth": true, "tags": ["block-parser"] },
+    { "id": "block-parser:nested", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=nested", "auth": true, "tags": ["block-parser"] },
+    { "id": "block-parser:stored", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=stored", "auth": true, "tags": ["block-parser"] }
+  ]
+}

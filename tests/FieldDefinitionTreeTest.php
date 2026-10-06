@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace CloakWP\BlockParser\Tests;
 
 use CloakWP\BlockParser\Acf\FieldDefinitionTree;
-use PHPUnit\Framework\TestCase;
+use CloakWP\BlockParser\Tests\Support\ParserTestCase;
 
-final class FieldDefinitionTreeTest extends TestCase
+final class FieldDefinitionTreeTest extends ParserTestCase
 {
   public function testMapByNamePreservesNestedSubFields(): void
   {
@@ -49,5 +49,22 @@ final class FieldDefinitionTreeTest extends TestCase
 
     $this->assertCount(1, $list);
     $this->assertSame('query', $list[0]['name']);
+  }
+
+  public function testSkipsMalformedDefinitionsAndKeepsTheLastDuplicateName(): void
+  {
+    $fields = [
+      false, null, 'invalid', [], ['name' => ''], ['name' => 7],
+      ['name' => 'title', 'type' => 'text'],
+      ['name' => 'title', 'type' => 'textarea'],
+      ['name' => 'group', 'type' => 'group', 'sub_fields' => [null, ['name' => 'label', 'type' => 'text']]],
+    ];
+    $original = $fields;
+    $this->assertSame([
+      'title' => ['name' => 'title', 'type' => 'textarea'],
+      'group' => ['name' => 'group', 'type' => 'group', 'sub_fields' => ['label' => ['name' => 'label', 'type' => 'text']]],
+    ], FieldDefinitionTree::mapByName($fields));
+    $this->assertSame($original, $fields);
+    $this->assertSame([], FieldDefinitionTree::asList([]));
   }
 }

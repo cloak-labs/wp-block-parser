@@ -2,60 +2,79 @@
 
 namespace CloakWP\BlockParser\Helpers;
 
-use pQuery;
+use CloakWP\BlockParser\Html\HtmlAdapterInterface;
+use CloakWP\BlockParser\Html\HtmlNodeInterface;
+use CloakWP\BlockParser\Html\NativeHtmlAdapter;
 
 class AttributeParser
 {
+  protected HtmlAdapterInterface $htmlAdapter;
+
+  public function __construct(?HtmlAdapterInterface $htmlAdapter = null)
+  {
+    $this->htmlAdapter = $htmlAdapter ?? apply_filters('cloakwp/block_parser/html_adapter', new NativeHtmlAdapter());
+  }
+
   /**
-   * Parse attributes for multiple block-type attributes in one pass.
-   * Parses the block HTML once and reuses the DOM for all attributes (major perf win).
+   * Merge sourced attributes into stored attributes, parsing HTML at most once.
+   * Stored values, defaults and meta-only schemas need no HTML processing.
    *
-   * @param array<string, array> $blockTypeAttrs Block type attribute definitions
-   * @param array<string, mixed> $blockAttrs Existing block attributes (missing/empty will be filled from HTML)
-   * @param string|array $html Block inner HTML (string) or inner_content array
-   * @param int $postId Post ID for meta sources
-   * @return array<string, mixed> Merged attributes with parsed values
+   * @param array<string, array> $blockTypeAttrs
+   * @param array<string, mixed> $blockAttrs
+   * @param string|array $html Block inner HTML or inner_content fragments
+   * @return array<string, mixed>
    */
   public function getAttributes(array $blockTypeAttrs, array $blockAttrs, string|array $html, int $postId = 0): array
   {
-    $htmlString = is_array($html) ? implode('', array_filter($html, fn($v) => $v !== null)) : $html;
-    $htmlString = trim($htmlString);
-    $dom = $htmlString !== '' ? pQuery::parseStr($htmlString) : null;
-
+    $htmlString = trim(is_array($html) ? implode('', array_filter($html, fn($v) => $v !== null)) : $html);
+    $dom = null;
     foreach ($blockTypeAttrs as $key => $attribute) {
       if (isset($blockAttrs[$key]) && $blockAttrs[$key] !== '') {
         continue;
       }
-      $attrValue = $this->getAttributeWithDom($attribute, $dom, $htmlString, $postId);
-      if ($attrValue !== null) {
-        $blockAttrs[$key] = $attrValue;
+      $value = $this->getAttributeWithDom($attribute, $dom, $htmlString, $postId);
+      if ($value !== null) {
+        $blockAttrs[$key] = $value;
       }
     }
-
     return $blockAttrs;
   }
 
-  public function getAttribute(array $attribute, string $html, int $postId = 0)
+  public function getAttribute(array $attribute, string $html, int $postId = 0): mixed
   {
-    return $this->getAttributeWithDom($attribute, null, $html, $postId);
+    $dom = null;
+    return $this->getAttributeWithDom($attribute, $dom, trim($html), $postId);
   }
 
-  /**
-   * @param \pQuery\Dom|null $dom Pre-parsed DOM (avoids re-parsing when parsing many attributes from same HTML)
-   */
-  protected function getAttributeWithDom(array $attribute, $dom, string $html, int $postId): mixed
+  protected function getAttributeWithDom(array $attribute, ?HtmlNodeInterface &$dom, string $html, int $postId): mixed
   {
     $value = null;
-
-    if (isset($attribute['source'])) {
-      $value = $this->getAttributeBySource($attribute, $html, $postId, $dom);
+    $source = $attribute['source'] ?? null;
+    if ($source === 'meta') {
+      $value = $this->handleMetaSource($attribute, $postId);
+    } elseif (in_array($source, ['attribute', 'html', 'rich-text', 'text', 'tag', 'query'], true)) {
+      if ($dom === null && $html !== '') {
+        $dom = $this->htmlAdapter->parse($html);
+      }
+      if ($dom !== null) {
+        if ($source === 'query') {
+          $value = $this->handleQuerySource($attribute, $dom, $postId);
+        } else {
+          $node = $dom->select($attribute['selector'] ?? '*');
+          $value = match ($source) {
+            'attribute' => $node?->attribute($attribute['attribute']),
+            'html', 'rich-text' => $node?->html(),
+            'text' => $node?->text(),
+            'tag' => $node?->tagName(),
+          };
+        }
+      }
     }
 
-    if (is_null($value) && isset($attribute['default'])) {
+    if ($value === null && isset($attribute['default'])) {
       $value = $attribute['default'];
     }
 
-    // Only run validation/sanitization if the type is a built-in type supported by WP REST schema
     $builtinTypes = ['array', 'object', 'string', 'number', 'integer', 'boolean', 'null'];
     if (
       isset($attribute['type']) &&
@@ -63,103 +82,31 @@ class AttributeParser
         (is_string($attribute['type']) && in_array($attribute['type'], $builtinTypes, true)) ||
         (is_array($attribute['type']) && count(array_diff($attribute['type'], $builtinTypes)) === 0)
       ) &&
-      rest_validate_value_from_schema($value, $attribute)
+      rest_validate_value_from_schema($value, $attribute) === true
     ) {
       $value = rest_sanitize_value_from_schema($value, $attribute);
     }
-
-    // Remove empty string or empty array values
-    if ($value === '' || (is_array($value) && empty($value))) {
-      return null;
-    }
-
-    return $value;
+    return $value === '' || $value === [] ? null : $value;
   }
 
-  /**
-   * @param \pQuery\Dom|null $dom Pre-parsed DOM; when null, $html is parsed
-   */
-  protected function getAttributeBySource(array $attribute, string $html, int $postId, $dom = null): mixed
-  {
-    $source = $attribute['source'];
-    if ($dom === null) {
-      $dom = trim($html) !== '' ? pQuery::parseStr(trim($html)) : null;
-    }
-    if ($dom === null) {
-      return $this->getAttributeWithoutSelector($attribute, null, $source, $postId);
-    }
-
-    if (isset($attribute['selector'])) {
-      return $this->getAttributeWithSelector($attribute, $dom, $source);
-    }
-
-    return $this->getAttributeWithoutSelector($attribute, $dom, $source, $postId);
-  }
-
-  protected function getAttributeWithSelector(array $attribute, $dom, string $source): mixed
-  {
-    $selector = $attribute['selector'];
-
-    switch ($source) {
-      case 'attribute':
-        return $dom->query($selector)->attr($attribute['attribute']);
-      case 'html':
-        return $dom->query($selector)->html();
-      case 'rich-text':
-        return $dom->query($selector)->html();
-      case 'text':
-        return $dom->query($selector)->text();
-      case 'query':
-        return $this->handleQuerySource($attribute, $dom);
-    }
-
-    return null;
-  }
-
-  /**
-   * @param \pQuery\Dom|null $dom
-   */
-  protected function getAttributeWithoutSelector(array $attribute, $dom, string $source, int $postId): mixed
-  {
-    if ($source === 'meta') {
-      return $this->handleMetaSource($attribute, $postId);
-    }
-    if ($dom === null) {
-      return null;
-    }
-    $node = $dom->query();
-
-    switch ($source) {
-      case 'attribute':
-        return $node->attr($attribute['attribute']);
-      case 'html':
-        return $node->html();
-      case 'text':
-        return $node->text();
-    }
-
-    return null;
-  }
-
-  protected function handleQuerySource(array $attribute, $dom): ?array
+  protected function handleQuerySource(array $attribute, HtmlNodeInterface $dom, int $postId): ?array
   {
     $result = [];
-    $nodes = $dom->query($attribute['selector'])->getIterator();
-
-    foreach ($nodes as $index => $node) {
-      $nodeResult = [];
-      foreach ($attribute['query'] as $key => $subAttribute) {
-        $value = $this->getAttribute($subAttribute, $node->toString());
+    foreach ($dom->selectAll($attribute['selector'] ?? '*') as $node) {
+      $row = [];
+      foreach ($attribute['query'] as $key => $schema) {
+        // Keep the node context: serializing/reparsing loses table cells and
+        // repeats work for every field in a gallery, list or table query.
+        $value = $this->getAttributeWithDom($schema, $node, '', $postId);
         if ($value !== null) {
-          $nodeResult[$key] = $value;
+          $row[$key] = $value;
         }
       }
-      if (!empty($nodeResult)) {
-        $result[$index] = $nodeResult;
+      if ($row !== []) {
+        $result[] = $row;
       }
     }
-
-    return !empty($result) ? $result : null;
+    return $result !== [] ? $result : null;
   }
 
   protected function handleMetaSource(array $attribute, int $postId): mixed

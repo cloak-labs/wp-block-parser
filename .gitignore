@@ -2,3 +2,7 @@ constants.php
 studio.json
 vendor
 .phpunit.cache
+coverage/
+phpunit.xml
+benchmarks/.html-adapter
+benchmarks/results/

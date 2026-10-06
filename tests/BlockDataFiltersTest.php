@@ -5,20 +5,10 @@ declare(strict_types=1);
 namespace CloakWP\BlockParser\Tests;
 
 use CloakWP\BlockParser\Acf\BlockDataFilters;
-use PHPUnit\Framework\TestCase;
+use CloakWP\BlockParser\Tests\Support\ParserTestCase;
 
-final class BlockDataFiltersTest extends TestCase
+final class BlockDataFiltersTest extends ParserTestCase
 {
-  protected function setUp(): void
-  {
-    $GLOBALS['wp_filters'] = [];
-  }
-
-  protected function tearDown(): void
-  {
-    $GLOBALS['wp_filters'] = [];
-  }
-
   public function testApplyPassesParsedBlockDefinitionsSourceBlockAndPostId(): void
   {
     $captured = [];
