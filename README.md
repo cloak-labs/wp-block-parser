@@ -356,7 +356,15 @@ including rendering, nested blocks, and block filters. ACF still loads complete
 definitions, expands clones and flexible layouts, and runs its normal field and
 value filters. The original registry is restored afterward, including on exceptions.
 The index is reused within the request and refreshed when registry data changes.
-It does not cache parsed post data or REST responses.
+Ordinary `parseBlocksFromPost()` does not cache parsed post data or REST responses.
+Consumers that share the same parser instance can opt into
+`parseBlocksFromPostCached($post)` to reuse a transformed post tree. This is useful
+when both a REST field and an SEO integration need the same blocks, regardless of
+which consumer runs first. The cache separates blog/post IDs, checks the post's
+content and WordPress's post/term change markers, and is cleared when transformers
+are replaced. It lasts only for that parser instance; no persistent output cache
+is written. Call `clearParsedPostCache()` after changing formatting hooks or other
+request-local dependencies. Cyclic synced-pattern references terminate safely.
 
 This optimization uses ACF's internal `ACF_Data` registry. Custom store subclasses
 and unsupported query shapes use ACF's original behavior. To disable it for an

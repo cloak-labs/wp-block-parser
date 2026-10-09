@@ -9,6 +9,17 @@ function get_current_blog_id(): int
   return TestEnvironment::$siteId;
 }
 
+function wp_cache_get($key, $group = ''): mixed
+{
+  return TestEnvironment::$objectCache[$group . ':' . $key] ?? false;
+}
+
+function wp_cache_set($key, $value, $group = '', $expire = 0): bool
+{
+  TestEnvironment::$objectCache[$group . ':' . $key] = $value;
+  return true;
+}
+
 function get_post($post): ?WP_Post
 {
   return $post instanceof WP_Post ? $post : (TestEnvironment::$posts[$post] ?? null);

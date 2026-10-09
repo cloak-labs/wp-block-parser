@@ -28,6 +28,7 @@ final class TestEnvironment
   public static array $acfMeta = [];
   public static array $acfFormattedValues = [];
   public static array $acfFormatRequests = [];
+  public static array $objectCache = [];
   public static int $siteId = 1;
 
   public static function reset(): void
@@ -37,6 +38,7 @@ final class TestEnvironment
     self::$isAdmin = true;
     self::$acfFields = self::$acfDefinitions = self::$acfDefinitionRequests = [];
     self::$acfBlockRequests = self::$acfMeta = self::$acfFormattedValues = self::$acfFormatRequests = [];
+    self::$objectCache = [];
     self::$siteId = 1;
     $GLOBALS['post'] = null;
     $GLOBALS['wp_filter'] = $GLOBALS['wp_filters'] = $GLOBALS['wp_actions'] = $GLOBALS['wp_current_filter'] = [];

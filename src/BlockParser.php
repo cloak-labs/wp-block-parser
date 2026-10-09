@@ -18,6 +18,10 @@ class BlockParser
   protected array $transformers = [];
   private static $initialized = false;
   protected HtmlAdapterInterface $htmlAdapter;
+  /** @var array<string, array{content: string, revision: string, blocks: array}> */
+  private array $parsedPostCache = [];
+  /** @var array<string, true> */
+  private array $parsingPosts = [];
 
   public function __construct(?HtmlAdapterInterface $htmlAdapter = null)
   {
@@ -61,33 +65,78 @@ class BlockParser
 
     $type = $transformerClass::getType();
     $this->transformers[$type] = new $transformerClass($this);
+    $this->clearParsedPostCache();
+  }
+
+  /**
+   * Opt-in, per-instance reuse for consumers such as REST blocks_data and SEO
+   * that need the same transformed tree. Ordinary parsing remains uncached.
+   * Post/term writes invalidate dependencies (including referenced patterns).
+   */
+  public function parseBlocksFromPostCached(WP_Post|int $post): array
+  {
+    $post = get_post($post);
+    if (!$post) {
+      if (Profiler::isEnabled()) {
+        Profiler::start();
+        Profiler::end();
+      }
+      return [];
+    }
+    $key = $this->postKey($post);
+    $revision = function_exists('wp_cache_get_last_changed')
+      ? wp_cache_get_last_changed('posts') . ':' . wp_cache_get_last_changed('terms')
+      : '';
+    $cached = $this->parsedPostCache[$key] ?? null;
+    if ($cached !== null && $cached['content'] === $post->post_content && $cached['revision'] === $revision) {
+      return $cached['blocks'];
+    }
+    $blocks = $this->parseBlocksFromPost($post);
+    $this->parsedPostCache[$key] = ['content' => $post->post_content, 'revision' => $revision, 'blocks' => $blocks];
+    return $blocks;
+  }
+
+  /** Clear after changing formatting hooks or other request-local dependencies. */
+  public function clearParsedPostCache(): void
+  {
+    $this->parsedPostCache = [];
+  }
+
+  private function postKey(WP_Post $post): string
+  {
+    $siteId = function_exists('get_current_blog_id') ? get_current_blog_id() : 1;
+    return $siteId . ':' . $post->ID;
   }
 
   public function parseBlocksFromPost(WP_Post|int $post): array
   {
-    if (Profiler::isEnabled()) {
-      Profiler::start();
-    }
-
     $post = get_post($post);
 
     // if the post is not found, return an empty array. This is helpful when, for example, a Synced Pattern is used on a page but got deleted. Without this early return, a critical error would prevent the editor page from loading.
     if (!$post) {
-      if (Profiler::isEnabled()) Profiler::end();
+      if (Profiler::isEnabled()) {
+        Profiler::start();
+        Profiler::end();
+      }
       return [];
     }
-
-    $blocks = parse_blocks($post->post_content);
-
-    $result = array_values(
-      $this->transformBlocks($blocks, $post->ID)
-    );
-
-    if (Profiler::isEnabled()) {
-      Profiler::end();
+    $key = $this->postKey($post);
+    // Synced patterns recurse through this same parser instance.
+    if (isset($this->parsingPosts[$key])) {
+      return [];
     }
-
-    return $result;
+    $this->parsingPosts[$key] = true;
+    if (Profiler::isEnabled()) {
+      Profiler::start();
+    }
+    try {
+      return array_values($this->transformBlocks(parse_blocks($post->post_content), $post->ID));
+    } finally {
+      unset($this->parsingPosts[$key]);
+      if (Profiler::isEnabled()) {
+        Profiler::end();
+      }
+    }
   }
 
   public function transformBlock(array $block, int $postId): array
