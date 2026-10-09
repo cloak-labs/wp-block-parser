@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 use CloakWP\BlockParser\Tests\Support\TestEnvironment;
 
+function get_current_blog_id(): int
+{
+  return TestEnvironment::$siteId;
+}
+
 function get_post($post): ?WP_Post
 {
   return $post instanceof WP_Post ? $post : (TestEnvironment::$posts[$post] ?? null);

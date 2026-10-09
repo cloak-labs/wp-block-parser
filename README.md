@@ -254,6 +254,7 @@ After every ACF field on a block has been formatted — and **before** `cloakwp/
 add_filter('cloakwp/block/data', function (array $parsedBlock, array $fieldDefinitions, WP_Block $wpBlock, ?int $postId) {
   // $fieldDefinitions is the ACF field-object tree for the block (nested `sub_fields` included),
   // even for fields Gutenberg omitted because they were empty.
+  // Value-aware InnerBlocks loading leaves unused fields' `layouts` empty (see below).
   return $parsedBlock;
 }, 10, 4);
 ```
@@ -363,6 +364,45 @@ integration or compare the same routes with the original lookups:
 
 ```php
 add_filter('cloakwp/block_parser/index_acf_fields', '__return_false');
+```
+
+Compatible CloakWP ACF InnerBlocks fields also enable value-aware loading. Before
+loading a block's field group, the parser checks its saved ACF field references.
+Empty or omitted InnerBlocks fields keep empty layouts during that transformation.
+Populated fields export only the child layouts named in their saved rows, combining
+all occurrences of a shared field key across repeater rows. Defaults and unknown
+value shapes retain complete layouts. Ordinary fields,
+including omitted Query defaults, still use ACF's native discovery and formatting.
+
+Each transformation uses a temporary copy of ACF's internal `ACF_Data` field
+cache, restored on completion or exception. This keeps incomplete definitions out
+of the normal cache and supports nested parsing and multisite switches. Normal ACF
+reads and editor controls still load full layouts. Custom field stores retain
+normal loading, and installations without a compatible InnerBlocks integration
+do not enable this path.
+
+The `cloakwp/block/data` hook sees only used layouts for InnerBlocks fields.
+If an integration requires that metadata or injects rows through runtime value
+filters, use `InnerBlocks::lazyLayouts(false)` on those fields or disable the path:
+
+```php
+add_filter('cloakwp/block_parser/value_aware_fields', '__return_false');
+```
+
+Before transforming an ACF block, the parser fires
+`cloakwp/block_parser/load_block_fields` (`string $name, WP_Block $block, ?int $postId`).
+An integration can import that block's schema here while retaining its complete
+metadata and callback catalog. Native WordPress rendering must have its own schema
+loader, for example on `render_block_data`; it does not pass through this parser hook.
+
+The real-ACF integration check registers request-only fixtures without saving
+content. It covers empty groups, populated fields after empty ones, mixed repeater
+rows, omitted Query defaults, cache restoration, and editor controls:
+
+```sh
+docker exec pillar-wordpress wp --allow-root eval-file \
+  /var/www/local-packages/cloakwp-block-parser/tests/Integration/ValueAwareFieldsWordPress.php \
+  --use-include --url=https://wp.localhost/hyland/
 ```
 
 See [benchmarks/README.md](benchmarks/README.md) for fixed extraction workloads

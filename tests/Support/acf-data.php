@@ -33,4 +33,15 @@ class ACF_Data
     $this->data = [];
     return $this;
   }
+
+  public function switch_site($siteId, $previousSiteId)
+  {
+    if ($this->multisite) {
+      $this->site_data[$previousSiteId] = $this->data;
+      $this->site_aliases[$previousSiteId] = $this->aliases;
+      $this->data = $this->site_data[$siteId] ?? [];
+      $this->aliases = $this->site_aliases[$siteId] ?? [];
+      unset($this->site_data[$siteId], $this->site_aliases[$siteId]);
+    }
+  }
 }

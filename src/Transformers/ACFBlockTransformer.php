@@ -6,6 +6,7 @@ use WP_Block;
 use CloakWP\BlockParser\Acf\BlockDataFilters;
 use CloakWP\BlockParser\Acf\GutenbergGroupNesting;
 use CloakWP\BlockParser\Acf\LocalFieldIndex;
+use CloakWP\BlockParser\Acf\ValueAwareFieldLoading;
 use CloakWP\BlockParser\Profiler;
 
 /**
@@ -26,7 +27,12 @@ class ACFBlockTransformer extends AbstractBlockTransformer
    */
   public function transform(WP_Block $block, int|null $postId = null): array
   {
-    return LocalFieldIndex::run(fn() => $this->transformWithFieldIndex($block, $postId));
+    // Integrations can import this block's schema before any field is resolved.
+    do_action('cloakwp/block_parser/load_block_fields', $block->name, $block, $postId);
+    return LocalFieldIndex::run(fn() => ValueAwareFieldLoading::run(
+      $block->attributes['data'] ?? [],
+      fn() => $this->transformWithFieldIndex($block, $postId)
+    ));
   }
 
   private function transformWithFieldIndex(WP_Block $block, int|null $postId): array
@@ -60,7 +66,8 @@ class ACFBlockTransformer extends AbstractBlockTransformer
   /**
    * All ACF field definitions registered on this block, including empty fields
    * that Gutenberg omitted from the saved attributes (so consumers can still
-   * discover marked groups such as Query).
+   * discover marked groups such as Query). Value-aware loading leaves unused
+   * InnerBlocks layouts empty within this transformation.
    *
    * @return list<array<string, mixed>>
    */
