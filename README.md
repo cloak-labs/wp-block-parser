@@ -153,6 +153,34 @@ retains its legacy serialization and whitespace behavior. Review payload changes
 when switching an existing installation. Invalid native CSS selectors throw
 `DOMException` rather than silently producing missing attributes.
 
+The experimental `TagProcessorHtmlAdapter` uses WordPress's
+`WP_HTML_Tag_Processor` for plain tag selectors, comma-separated tag lists and
+`*`. A flat span/nesting index lets nested queries reuse the original fragment.
+Other CSS selectors use a lazy, shared native DOM. Tables, raw-text elements,
+foreign content, unsupported tags and markup requiring tree repair also fall
+back to native parsing. This is a conservative optimization subset, not a second
+HTML5 tree builder. It uses a subclass's protected bookmark spans for offsets;
+compatibility tests should accompany WordPress upgrades.
+
+```php
+use CloakWP\BlockParser\Html\TagProcessorHtmlAdapter;
+
+$experimentalParser = new BlockParser(new TagProcessorHtmlAdapter());
+```
+
+By default, `html()` retains native serialization; this creates a DOM when rich
+text is first requested. For experiments only, `new TagProcessorHtmlAdapter(
+preserveSourceHtml: true)` slices original inner markup on its streaming subset.
+That avoids DOM construction but preserves original tag case, entity spelling,
+and attribute quoting instead of canonicalizing them. Native fallback nodes
+still use native serialization. Review output before enabling this option.
+
+The native adapter remains recommended. Initial PHP 8.4/WordPress 6.7 benchmarks
+found no extraction speedup from either tag-processor mode, even though a bare
+single-attribute lookup was modestly faster. See
+[the measured results](benchmarks/tag-processor-results.md) and the repeatable
+benchmark scripts for the workload and timing details.
+
 ### Extending
 
 <details>
@@ -300,6 +328,7 @@ From this package's directory, using PHP 8.4+ and Composer:
 composer install
 composer test
 composer test:pquery
+composer test:tag-processor
 ```
 
 Run a focused test or check that tests are independent of execution order:
@@ -327,7 +356,7 @@ the isolated test environment. To check against another local WordPress version,
 set `WP_TESTS_CORE_PATH` to its core directory (the directory containing
 `wp-includes`) before running `composer test`.
 
-GitHub Actions runs both adapters with PHPUnit 11 on PHP 8.4 and 8.5, plus PHPUnit
+GitHub Actions runs all three adapters with PHPUnit 11 on PHP 8.4 and 8.5, plus PHPUnit
 12 on PHP 8.4. Warnings, risky tests, empty suites, and deprecations originating in this
 package fail the run. Dependency deprecations are excluded from that check.
 

@@ -2,6 +2,10 @@
   "cases": [
     { "id": "block-parser:simple", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=simple", "auth": true, "tags": ["block-parser"] },
     { "id": "block-parser:nested", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=nested", "auth": true, "tags": ["block-parser"] },
-    { "id": "block-parser:stored", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=stored", "auth": true, "tags": ["block-parser"] }
+    { "id": "block-parser:stored", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=stored", "auth": true, "tags": ["block-parser"] },
+    { "id": "block-parser:image", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=image", "auth": true, "tags": ["block-parser"] },
+    { "id": "block-parser:text", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=text", "auth": true, "tags": ["block-parser"] },
+    { "id": "block-parser:css", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=css", "auth": true, "tags": ["block-parser"] },
+    { "id": "block-parser:table", "suite": "rest", "path": "wp-json/block-parser-benchmark/v1/attributes?fixture=table", "auth": true, "tags": ["block-parser"] }
   ]
 }

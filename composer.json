@@ -20,7 +20,8 @@
   },
   "scripts": {
     "test": "phpunit",
-    "test:pquery": "BLOCK_PARSER_HTML_ADAPTER=pquery phpunit"
+    "test:pquery": "BLOCK_PARSER_HTML_ADAPTER=pquery phpunit",
+    "test:tag-processor": "BLOCK_PARSER_HTML_ADAPTER=tag-processor phpunit"
   },
   "require": {
     "php": ">=8.4",

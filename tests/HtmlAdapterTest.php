@@ -8,6 +8,7 @@ use CloakWP\BlockParser\BlockParser;
 use CloakWP\BlockParser\Helpers\AttributeParser;
 use CloakWP\BlockParser\Html\NativeHtmlAdapter;
 use CloakWP\BlockParser\Html\PQueryHtmlAdapter;
+use CloakWP\BlockParser\Html\TagProcessorHtmlAdapter;
 use CloakWP\BlockParser\Tests\Support\CountingHtmlAdapter;
 use CloakWP\BlockParser\Tests\Support\ParserTestCase;
 use CloakWP\BlockParser\Tests\Support\TestEnvironment;
@@ -17,7 +18,8 @@ final class HtmlAdapterTest extends ParserTestCase
 {
   public static function adapters(): array
   {
-    return ['native' => [NativeHtmlAdapter::class], 'pquery' => [PQueryHtmlAdapter::class]];
+    return ['native' => [NativeHtmlAdapter::class], 'pquery' => [PQueryHtmlAdapter::class],
+      'tag-processor' => [TagProcessorHtmlAdapter::class]];
   }
 
   #[DataProvider('adapters')]

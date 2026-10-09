@@ -57,6 +57,35 @@ For another WordPress installation, use the portable `wp-bench` CLI and its
 WP-CLI configuration with these same custom cases; read the benchmark package's
 README for setup and comparison requirements.
 
+## Tag processor experiments
+
+Set `.html-adapter` to `tag-processor` for native-compatible serialization or
+`tag-processor-source` for original-source inner HTML. Both modes retain native
+fallback for complex selectors and unsupported markup. The fixture catalog
+also includes image attributes, text, advanced CSS and table queries. Capture
+native first, replay the same plan for each mode, and compare payload hashes.
+
+For isolated extraction timings without HTTP/WordPress bootstrap, from this
+package's directory with development dependencies installed:
+
+```sh
+php benchmarks/html-adapters.php 1000 30 > /tmp/html-adapters.json
+# Match the site's installed WordPress rather than the Composer test version:
+WP_TESTS_CORE_PATH=/path/to/wordpress php benchmarks/html-adapters.php 1000 30
+```
+
+This runs three engines in rotating/reversing order over all fixtures, verifies
+their output, discards three warmup batches and measures 30 batches of 1,000
+extractions. Results are microseconds per extraction; p95 is the percentile of
+batch averages, not individual calls. It also measures a bare tag/attribute
+lookup without the BlockParser node contract as a best-case comparison. Disable
+Xdebug for isolated timings (e.g. `XDEBUG_MODE=off`) and keep other workloads idle.
+
+When unrelated repositories are being edited, restrict the HTTP runner with
+`--source-path=packages/composer/cloakwp-block-parser` on every run. This still
+rejects parser edits during measurement, but does not detect concurrent changes
+elsewhere in WordPress. Record that limitation with the results.
+
 ## Real REST routes and ACF lookups
 
 Discover representative frontpage, page-list, page-detail and resolve-slug cases,

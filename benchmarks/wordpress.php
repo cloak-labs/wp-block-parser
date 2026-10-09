@@ -11,18 +11,21 @@ if (!in_array($environment, ['local', 'development'], true)) {
 
 // This ignored file lets the same pinned URLs exercise both adapters.
 $choice = is_readable(__DIR__ . '/.html-adapter') ? trim(file_get_contents(__DIR__ . '/.html-adapter')) : 'native';
-$adapterClass = $choice === 'pquery'
-  ? \CloakWP\BlockParser\Html\PQueryHtmlAdapter::class
-  : \CloakWP\BlockParser\Html\NativeHtmlAdapter::class;
+$adapterClass = match ($choice) {
+  'pquery' => \CloakWP\BlockParser\Html\PQueryHtmlAdapter::class,
+  'tag-processor', 'tag-processor-source' => \CloakWP\BlockParser\Html\TagProcessorHtmlAdapter::class,
+  default => \CloakWP\BlockParser\Html\NativeHtmlAdapter::class,
+};
 if (class_exists($adapterClass)) {
-  add_filter('cloakwp/block_parser/html_adapter', fn() => new $adapterClass(), PHP_INT_MAX);
+  add_filter('cloakwp/block_parser/html_adapter', fn() => $choice === 'tag-processor-source'
+    ? new $adapterClass(preserveSourceHtml: true) : new $adapterClass(), PHP_INT_MAX);
 }
 
 add_action('rest_api_init', function () {
   register_rest_route('block-parser-benchmark/v1', '/attributes', [
     'methods' => 'GET',
     'permission_callback' => fn() => current_user_can('manage_options'),
-    'args' => ['fixture' => ['default' => 'simple', 'enum' => ['simple', 'nested', 'stored']]],
+    'args' => ['fixture' => ['default' => 'simple', 'enum' => array_keys(require __DIR__ . '/fixtures.php')]],
     'callback' => function (\WP_REST_Request $request) {
       $fixtures = require __DIR__ . '/fixtures.php';
       $fixture = $fixtures[$request['fixture']];

@@ -46,6 +46,9 @@ final class TestEnvironment
     if (getenv('BLOCK_PARSER_HTML_ADAPTER') === 'pquery') {
       add_filter('cloakwp/block_parser/html_adapter', static fn() => new PQueryHtmlAdapter());
     }
+    if (getenv('BLOCK_PARSER_HTML_ADAPTER') === 'tag-processor') {
+      add_filter('cloakwp/block_parser/html_adapter', static fn() => new \CloakWP\BlockParser\Html\TagProcessorHtmlAdapter());
+    }
 
     $registry = WP_Block_Type_Registry::get_instance();
     foreach (array_keys($registry->get_all_registered()) as $name) {
