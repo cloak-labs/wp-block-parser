@@ -146,6 +146,13 @@ class BlockParser
 
   private function transformBlockWithFieldIndex(array $block, int $postId): array
   {
+    // Core omits fully hidden blocks even when visibility controls are disabled.
+    // Structured consumers need the same exclusion before extracting attributes,
+    // resolving bindings or expanding a synced pattern's referenced content.
+    if (($block['attrs']['metadata']['blockVisibility'] ?? null) === false) {
+      return [];
+    }
+
     $wpBlock = new WP_Block($block);
     $blockName = $block['blockName'] ?? '';
 
